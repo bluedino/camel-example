@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:camel="http://camel.apache.org/schema/spring"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+		http://www.springframework.org/schema/tx  http://www.springframework.org/schema/tx/spring-tx-3.1.xsd
+		http://www.springframework.org/schema/context  http://www.springframework.org/schema/context/spring-context-3.1.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-3.1.xsd
+		http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+	<context:annotation-config />
+
+	<bean id="msgProducer" class="basaki.intprod.MessageProducer" />
+	<!-- Camel service processors -->
+	<bean id="formatter" class="basaki.intprod.StringToPayloadDataFormat" />
+	<bean id="excToStrFormat" class="basaki.intprod.FileNameDataFormat" />
+	<bean id="procX" class="basaki.intprod.ProcessorX" />
+	<bean id="procY" class="basaki.intprod.ProcessorY" />
+	<bean id="procZ" class="basaki.intprod.ProcessorZ" />
+
+	<bean id="myInterceptor" class="basaki.intprod.ProcessInterceptorv2" />
+
+	<!-- <camel:endpoint id="deadletter.queue" -->
+	<!-- uri="file:/data/Examples/camel/camel-example/dead" /> -->
+	<!-- <camel:errorHandler id="myErrorHandler" type="DeadLetterChannel" -->
+	<!-- deadLetterUri="deadletter.queue" useOriginalMessage="false" /> -->
+
+	<bean id="redeliveryPolicyConfig" class="org.apache.camel.processor.RedeliveryPolicy">
+		<property name="maximumRedeliveries" value="1" />
+		<property name="redeliveryDelay" value="5000" />
+	</bean>
+	<bean id="deadLetterErrorHandler" class="org.apache.camel.builder.DeadLetterChannelBuilder">
+		<property name="deadLetterUri" value="file:/data/Examples/camel/camel-example/dead" />
+		<!-- <property name="redeliveryPolicy" ref="redeliveryPolicyConfig" /> -->
+	</bean>
+
+
+	<camel:errorHandler id="myErrorHandler" type="DeadLetterChannel"
+		deadLetterUri="file:/data/Examples/camel/camel-example/dead" useOriginalMessage="true">
+<!-- 		<camel:redeliveryPolicy maximumRedeliveries="1" redeliveryDelay="1000" logHandled="true" asyncDelayedRedelivery="true"/> -->
+	</camel:errorHandler>
+
+	<camel:camelContext xmlns="http://camel.apache.org/schema/spring"> 
+
+
+		<endpoint id="request.queue"
+			uri="file:/data/Examples/camel/camel-example/in?delete=true&amp;consumer.delay=5000" />
+		<endpoint id="response.queue" uri="file:/data/Examples/camel/camel-example/out" />
+		<endpoint id="log.queue" uri="file:/data/Examples/camel/camel-example/log" />
+
+		<!-- case 1 - retry -->
+		<!-- if it fails in filter D, it will retry again from D and then go to 
+			E if successful -->
+		<!-- at most it will retry based maximumRedeliveries property -->
+		<!-- <camel:onException> -->
+		<!-- <exception>basaki.ValidationException</exception> -->
+		<!-- <redeliveryPolicy maximumRedeliveries="2" /> -->
+		<!-- </camel:onException> -->
+
+		<!-- case 2 - rollback -->
+		<!-- if it fails in filter D, it will start from first transformer -->
+		<!-- <camel:onException> -->
+		<!-- <exception>basaki.ValidationException</exception> -->
+		<!-- <redeliveryPolicy disableRedelivery="true" /> -->
+		<!-- <rollback markRollbackOnly="true" /> -->
+		<!-- </camel:onException> -->
+
+		<!-- case 3 - transactions ends when there is an exception with message 
+			being consumed -->
+		<!-- <camel:onException> -->
+		<!-- <exception>basaki.ValidationException</exception> -->
+		<!-- <redeliveryPolicy maximumRedeliveries="2" /> -->
+		<!-- <redeliveryPolicy disableRedelivery="true" /> -->
+		<!-- <handled> -->
+		<!-- <constant>true</constant> -->
+		<!-- </handled> -->
+		<!-- </camel:onException> -->
+
+		<!-- <camel:intercept> -->
+		<!-- <camel:process ref="preInterceptor" id="id-preInterceptor" /> -->
+		<!-- </camel:intercept> -->
+
+
+
+		<camel:route>
+			<camel:from uri="direct:start" />
+			<camel:marshal>
+				<custom ref="excToStrFormat" />
+			</camel:marshal>
+			<camel:to uri="log.queue" />
+		</camel:route>
+
+		<!-- <camel:route id="example-service" errorHandlerRef="deadLetterErrorHandler"> -->
+		<camel:route id="example-service" errorHandlerRef="myErrorHandler">
+			<camel:from uri="request.queue" />
+			<camel:unmarshal>
+				<!-- refer to my custom data format -->
+				<custom ref="formatter" />
+			</camel:unmarshal>
+			<camel:process ref="procX" id="id-procX" />
+			<camel:process ref="procY" id="id-procY" />
+			<camel:process ref="procZ" id="id-procZ" />
+			<camel:marshal>
+				<custom ref="formatter" />
+			</camel:marshal>
+			<camel:to uri="response.queue" />
+		</camel:route>
+
+	</camel:camelContext>
+
+</beans>

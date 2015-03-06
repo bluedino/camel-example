@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:camel="http://camel.apache.org/schema/spring"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+		http://www.springframework.org/schema/tx  http://www.springframework.org/schema/tx/spring-tx-3.1.xsd
+		http://www.springframework.org/schema/context  http://www.springframework.org/schema/context/spring-context-3.1.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-3.1.xsd
+		http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+	<!-- Camel service processors -->
+	<bean id="stringToPayloadTransformer" class="basaki.StringToPayloadTransformer" />
+	<bean id="filterA" class="basaki.FilterA" />
+	<bean id="filterB" class="basaki.FilterB" />
+	<bean id="filterC" class="basaki.FilterC" />
+	<bean id="filterD" class="basaki.FilterD" />
+	<bean id="filterE" class="basaki.FilterE" />
+	<bean id="payloadToStringTransformer" class="basaki.PayloadToStringTransformer" />
+
+	<camel:camelContext xmlns="http://camel.apache.org/schema/spring">
+
+		<endpoint id="request.queue"
+			uri="file:/data/Examples/camel/camel-example/in?delete=true&amp;consumer.delay=5000" />
+		<endpoint id="response.queue" uri="file:/data/Examples/camel/camel-example/out" />
+
+		<!-- case 1 - retry -->
+		<!-- if it fails in filter D, it will retry again from D and then go to 
+			E if successful -->
+		<!-- at most it will retry based maximumRedeliveries property -->
+		<!-- <camel:onException> -->
+		<!-- <exception>basaki.ValidationException</exception> -->
+		<!-- <redeliveryPolicy maximumRedeliveries="2" /> -->
+		<!-- </camel:onException> -->
+
+		<!-- case 2 - rollback -->
+		<!-- if it fails in filter D, it will start from first transformer -->
+		<!-- <camel:onException> -->
+		<!-- <exception>basaki.ValidationException</exception> -->
+		<!-- <redeliveryPolicy disableRedelivery="true" /> -->
+		<!-- <rollback markRollbackOnly="true" /> -->
+		<!-- </camel:onException> -->
+
+        <!-- case 3 - transactions ends when there is an exception with message being consumed -->
+		<camel:onException>
+			<exception>basaki.ValidationException</exception>
+			<!-- <redeliveryPolicy maximumRedeliveries="2" /> -->
+			<redeliveryPolicy disableRedelivery="true" />
+			<handled>
+				<constant>true</constant>
+			</handled>
+		</camel:onException>
+
+		<camel:route id="example-service">
+			<camel:from uri="request.queue" />
+			<camel:process ref="stringToPayloadTransformer" id="id-stringToPayloadTransformer" />
+			<camel:process ref="filterA" id="id-filterA" />
+			<camel:process ref="filterB" id="id-filterB" />
+			<camel:process ref="filterC" id="id-filterC" />
+			<camel:process ref="filterD" id="id-filterD" />
+			<camel:process ref="filterE" id="id-filterE" />
+			<camel:process ref="payloadToStringTransformer" id="id-payloadToStringTransformer" />
+			<camel:to uri="response.queue" />
+		</camel:route>
+
+	</camel:camelContext>
+
+</beans>
